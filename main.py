@@ -8,6 +8,7 @@ import io
 import json
 import zipfile
 import logging
+import re
 
 
 class ExtractFilesFn(beam.DoFn):
@@ -26,7 +27,7 @@ class ExtractFilesFn(beam.DoFn):
                     file_path = FileSystems.join(self.extract_location, filename)
                     with FileSystems.create(file_path) as out:
                         out.write(f.read())
-                    if "/" in filename:
+                    if re.match(r"/\d{4}-\d{2}-\d{2}.json$", filename):
                         yield file_path
                     else:
                         yield TaggedOutput(
@@ -47,25 +48,28 @@ class ReadAndFormatMessagesFn(beam.DoFn):
         ]
     }
 
-    def process(self, element: str):
+    def process(self, filename: str):
         # path/to/channel/YYYY-MM-DD.json -> channel
-        channel = FileSystems.split(element)[0].split("/")[-1]
-        with FileSystems.open(element) as f:
+        channel = FileSystems.split(filename)[0].split("/")[-1]
+        with FileSystems.open(filename) as f:
             messages = json.loads(f.read())
-            return [
-                {
-                    "ts": message["ts"],
-                    "timestamp": float(message["ts"]),
-                    "subtype": message.get("subtype"),
-                    "channel": channel,
-                    "user_name": message.get("user_profile", {}).get("name"),
-                    "text": message.get("text"),
-                    "reactions": json.dumps(message["reactions"])
-                    if "reactions" in message
-                    else None,
-                }
-                for message in messages
-            ]
+            for message in messages:
+                try:
+                    yield [
+                        {
+                            "ts": message["ts"],
+                            "timestamp": float(message["ts"]),
+                            "subtype": message.get("subtype"),
+                            "channel": channel,
+                            "user_name": message.get("user_profile", {}).get("name"),
+                            "text": message.get("text"),
+                            "reactions": json.dumps(message["reactions"])
+                            if "reactions" in message
+                            else None,
+                        }
+                    ]
+                except KeyError as e:
+                    logging.warn("%s: KeyError %s: %s", filename, e, message)
 
 
 class ReadAndFormatUsersFn(beam.DoFn):
@@ -76,8 +80,8 @@ class ReadAndFormatUsersFn(beam.DoFn):
         ]
     }
 
-    def process(self, element: str):
-        with FileSystems.open(element) as f:
+    def process(self, filename: str):
+        with FileSystems.open(filename) as f:
             users = json.loads(f.read())
             return [
                 {
