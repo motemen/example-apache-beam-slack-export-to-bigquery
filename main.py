@@ -63,19 +63,17 @@ class ReadAndFormatMessagesFn(beam.DoFn):
             messages = json.loads(f.read())
             for message in messages:
                 try:
-                    yield [
-                        {
-                            "ts": message["ts"],
-                            "timestamp": float(message["ts"]),
-                            "subtype": message.get("subtype"),
-                            "channel": channel,
-                            "user_name": message.get("user_profile", {}).get("name"),
-                            "text": message.get("text"),
-                            "reactions": json.dumps(message["reactions"])
-                            if "reactions" in message
-                            else None,
-                        }
-                    ]
+                    yield {
+                        "ts": message["ts"],
+                        "timestamp": float(message["ts"]),
+                        "subtype": message.get("subtype"),
+                        "channel": channel,
+                        "user_name": message.get("user_profile", {}).get("name"),
+                        "text": message.get("text"),
+                        "reactions": json.dumps(message["reactions"])
+                        if "reactions" in message
+                        else None,
+                    }
                 except KeyError as e:
                     logging.warn("%s: KeyError %s: %s", filename, e, message)
 
