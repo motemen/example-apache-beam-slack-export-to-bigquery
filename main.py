@@ -1,4 +1,3 @@
-import os
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.io.filesystems import FileSystems
 from apache_beam.pvalue import TaggedOutput
@@ -7,9 +6,10 @@ import apache_beam as beam
 import argparse
 import io
 import json
-import zipfile
 import logging
+import os
 import re
+import zipfile
 
 
 class ExtractFilesFn(beam.DoFn):
