@@ -15,20 +15,27 @@ import re
 class ExtractFilesFn(beam.DoFn):
     OUTPUT_TAG_METADATA = "tag_metadata"
 
-    def __init__(self, extract_location: str):
+    def __init__(self, extract_location: str, channels_re: str = None):
         self.extract_location = extract_location
+        self.channels_re = channels_re
 
     def process(self, element: apache_beam.io.fileio.ReadableFile):
-        with zipfile.ZipFile(io.BytesIO(element.read()), "r") as zip_ref:
+        with zipfile.ZipFile(
+            io.BytesIO(element.read()), "r", metadata_encoding="utf-8"
+        ) as zip_ref:
             for filename in zip_ref.namelist():
                 if zip_ref.getinfo(filename).is_dir():
                     continue
 
                 with zip_ref.open(filename) as f:
                     file_path = FileSystems.join(self.extract_location, filename)
+                    dir, base = os.path.split(filename)
+                    if self.channels_re:
+                        if not re.match(self.channels_re, dir):
+                            continue
                     with FileSystems.create(file_path) as out:
                         out.write(f.read())
-                    if re.match(r"/\d{4}-\d{2}-\d{2}.json$", filename):
+                    if re.match(r"\d{4}-\d{2}-\d{2}\.json", base):
                         yield file_path
                     else:
                         yield TaggedOutput(
@@ -105,6 +112,11 @@ def main():
         type=str,
         help="Location to extract files",
     )
+    parser.add_argument(
+        "--channels_re",
+        type=str,
+        help="Regex for channels to extract",
+    )
 
     args, beam_args = parser.parse_known_args()
     beam_options = PipelineOptions(beam_args)
@@ -120,8 +132,11 @@ def main():
             | "Match files" >> beam.io.fileio.MatchFiles(args.input)
             | "Read matches" >> beam.io.fileio.ReadMatches()
             | "Extract files"
-            >> beam.ParDo(ExtractFilesFn(args.extract_location)).with_outputs(
-                ExtractFilesFn.OUTPUT_TAG_METADATA, main="messages"
+            >> beam.ParDo(
+                ExtractFilesFn(args.extract_location, args.channels_re)
+            ).with_outputs(
+                ExtractFilesFn.OUTPUT_TAG_METADATA,
+                main="_messages",
             )
         )
 
