@@ -1,3 +1,4 @@
+import os
 from apache_beam.options.pipeline_options import PipelineOptions
 from apache_beam.io.filesystems import FileSystems
 from apache_beam.pvalue import TaggedOutput
@@ -107,6 +108,11 @@ def main():
 
     args, beam_args = parser.parse_known_args()
     beam_options = PipelineOptions(beam_args)
+    project = beam_options.view_as(
+        beam.options.pipeline_options.GoogleCloudOptions
+    ).project
+    if project and not os.environ.get("GOOGLE_CLOUD_PROJECT"):
+        os.environ["GOOGLE_CLOUD_PROJECT"] = project
 
     with beam.Pipeline(options=beam_options) as pipeline:
         messages, meta = (
@@ -128,13 +134,15 @@ def main():
             | "Read and Format Users" >> beam.ParDo(ReadAndFormatUsersFn())
         )
 
-        if args.output_dataset:
+        if project and args.output_dataset:
             messages | "Write Messages to BigQuery" >> beam.io.WriteToBigQuery(
+                project=project,
                 table=args.output_dataset + ".messages",
                 schema=ReadAndFormatMessagesFn.BIGQUERY_SCHEMA,
                 write_disposition=beam.io.BigQueryDisposition.WRITE_TRUNCATE,
             )
             users | "Write Users to BigQuery" >> beam.io.WriteToBigQuery(
+                project=project,
                 table=args.output_dataset + ".users",
                 schema=ReadAndFormatUsersFn.BIGQUERY_SCHEMA,
                 write_disposition=beam.io.BigQueryDisposition.WRITE_TRUNCATE,
