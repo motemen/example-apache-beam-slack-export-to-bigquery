@@ -53,7 +53,7 @@ class ReadAndFormatMessagesFn(beam.DoFn):
             {"name": "user_name", "type": "STRING", "mode": "NULLABLE"},
             {"name": "text", "type": "STRING", "mode": "REQUIRED"},
             {"name": "reactions", "type": "STRING", "mode": "NULLABLE"},
-        ]
+        ],
     }
 
     def process(self, filename: str):
@@ -155,6 +155,10 @@ def main():
                 table=args.output_dataset + ".messages",
                 schema=ReadAndFormatMessagesFn.BIGQUERY_SCHEMA,
                 write_disposition=beam.io.BigQueryDisposition.WRITE_TRUNCATE,
+                additional_bq_parameters={
+                    "timePartitioning": {"type": "DAY", "field": "timestamp"},
+                    "clustering": {"fields": ["channel"]},
+                },
             )
             users | "Write Users to BigQuery" >> beam.io.WriteToBigQuery(
                 project=project,
